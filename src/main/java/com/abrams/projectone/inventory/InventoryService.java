@@ -68,14 +68,40 @@ public class InventoryService {
     }
 
     public Inventory update(Long id, Inventory updatedInventory) {
+        // 1. Find existing record
         Inventory existing = inventoryRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Inventory record not found!"));
 
+        // 2. Determine target values (handle partial updates)
+        Warehouse targetWarehouse = existing.getWarehouse();
         if (updatedInventory.getWarehouse() != null && updatedInventory.getWarehouse().getId() != null) {
-            Warehouse warehouse = warehouseRepository.findById(updatedInventory.getWarehouse().getId())
+            targetWarehouse = warehouseRepository.findById(updatedInventory.getWarehouse().getId())
                 .orElseThrow(() -> new RuntimeException("Warehouse not found"));
-            existing.setWarehouse(warehouse);
         }
+
+        int targetQuantity = existing.getQuantity();
+        if (updatedInventory.getQuantity() != null) {
+            targetQuantity = updatedInventory.getQuantity();
+        }
+
+        // 3. Check Capacity
+        boolean warehouseChanged = !existing.getWarehouse().getId().equals(targetWarehouse.getId());
+        boolean quantityChanged = existing.getQuantity() != targetQuantity;
+
+        if (warehouseChanged || quantityChanged) {
+            Long currentLoad = inventoryRepository.getTotalQuantityInWarehouse(targetWarehouse.getId());
+            
+            // If same warehouse, subtract old quantity first. If moving, use full load.
+            long effectiveLoad = warehouseChanged ? currentLoad : (currentLoad - existing.getQuantity());
+
+            if (effectiveLoad + targetQuantity > targetWarehouse.getMaxCapacity()) {
+                throw new RuntimeException("Update failed: Warehouse capacity exceeded!");
+            }
+        }
+
+        // 4. Apply Updates
+        existing.setWarehouse(targetWarehouse);
+        existing.setQuantity(targetQuantity);
 
         if (updatedInventory.getProduct() != null && updatedInventory.getProduct().getId() != null) {
             Product product = productRepository.findById(updatedInventory.getProduct().getId())
@@ -83,15 +109,19 @@ public class InventoryService {
             existing.setProduct(product);
         }
 
-        if (updatedInventory.getQuantity() != null) {
-            existing.setQuantity(updatedInventory.getQuantity());
-        }
-        
         if (updatedInventory.getStorageLocation() != null) {
-             existing.setStorageLocation(updatedInventory.getStorageLocation());
+                existing.setStorageLocation(updatedInventory.getStorageLocation());
         }
 
+        // 5. Save
         return inventoryRepository.save(existing);
+    }
+
+    public void delete(Long id) {
+        Inventory existing = inventoryRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Inventory record not found!"));
+
+        inventoryRepository.delete(existing);
     }
 
    @Transactional
@@ -120,7 +150,7 @@ public class InventoryService {
 
         // 5. CHECK DESTINATION CAPACITY
         // Calculate current load (handles nulls by returning 0)
-        Integer currentDestLoad = inventoryRepository.getTotalQuantityInWarehouse(destWarehouseId);
+        Long currentDestLoad = inventoryRepository.getTotalQuantityInWarehouse(destWarehouseId);
         
         if (currentDestLoad + amount > destWarehouse.getMaxCapacity()) {
              throw new RuntimeException("Transfer failed: Destination warehouse capacity exceeded!");
