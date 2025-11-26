@@ -43,7 +43,7 @@ public class InventoryService {
 
         // 3. CAPACITY CHECK (Existing logic)
         Integer maxCapacity = warehouse.getMaxCapacity();
-        Integer currentLoad = inventoryRepository.getTotalQuantityInWarehouse(warehouseId);
+        Long currentLoad = inventoryRepository.getTotalQuantityInWarehouse(warehouseId);
         
         if (currentLoad + inventory.getQuantity() > maxCapacity) {
              throw new RuntimeException("Warehouse capacity exceeded!");

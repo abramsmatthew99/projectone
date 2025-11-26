@@ -1,0 +1,14 @@
+/* frontend/src/index.css */
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left; /* Default Vite centers text too */
+}
