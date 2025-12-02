@@ -6,9 +6,9 @@ import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import ProductList from './pages/ProductList';
 import InventoryList from './pages/InventoryList';
+import WarehouseList from './pages/WarehouseList';
 
-// Placeholders 
-const WarehouseList = () => <h2 className="text-center mt-5">Warehouse List Coming Soon</h2>;
+
 
 function App() {
   return (
