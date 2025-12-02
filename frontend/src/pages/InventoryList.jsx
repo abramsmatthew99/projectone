@@ -5,36 +5,63 @@ import {
     getAllProducts, 
     getAllWarehouses, 
     createInventory, 
-    updateInventory, // <--- 1. Import update function
+    updateInventory,
     transferInventory 
 } from '../services/api';
 import GenericTable from '../components/GenericTable';
 import GenericModal from '../components/GenericModal';
+import useCrudForm from '../hooks/useCrudForm';
 
 const InventoryList = () => {
     const [inventory, setInventory] = useState([]);
-    
-    // Dropdown Data
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
 
-    // --- STATE FOR "ADD/EDIT" MODAL ---
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [editingId, setEditingId] = useState(null); // <--- Track Edit Mode
-    const [addFormData, setAddFormData] = useState({
-        productId: '',
-        warehouseId: '',
-        quantity: '',
-        storageLocation: ''
+    // --- USE THE HOOK FOR ADD/EDIT ---
+    const {
+        formData: addFormData,
+        editingId,
+        showModal: showAddModal,
+        handleInputChange: handleAddInput,
+        openCreateModal,
+        openEditModal: baseOpenEditModal, // Rename the base function
+        closeModal: closeAddModal,
+        handleSubmit: handleSaveSubmit,
+        setFormData
+    } = useCrudForm(
+        { productId: '', warehouseId: '', quantity: '', storageLocation: '' },
+        (data) => createInventory(formatPayload(data)), // Wrapper to format payload on create
+        (id, data) => updateInventory(id, formatPayload(data)), // Wrapper to format payload on update
+        () => loadInventory()
+    );
+
+    // --- HELPER TO FORMAT DATA FOR API ---
+    // The API expects nested objects { product: { id: 1 } }, but form uses flat IDs.
+    const formatPayload = (data) => ({
+        product: { id: data.productId },
+        warehouse: { id: data.warehouseId },
+        quantity: parseInt(data.quantity),
+        storageLocation: data.storageLocation
     });
 
-    // --- STATE FOR "TRANSFER" MODAL ---
+    // --- CUSTOM EDIT HANDLER ---
+    // We need to flatten the nested object before opening the modal
+    const handleEditClick = (item) => {
+        const flatItem = {
+            id: item.id,
+            productId: item.product.id,
+            warehouseId: item.warehouse.id,
+            quantity: item.quantity,
+            storageLocation: item.storageLocation
+        };
+        setFormData(flatItem);
+        baseOpenEditModal(flatItem);
+    };
+
+    // --- STATE FOR TRANSFER MODAL ---
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [transferData, setTransferData] = useState({
-        sourceWarehouseId: '',
-        destWarehouseId: '',
-        productId: '',
-        amount: ''
+        sourceWarehouseId: '', destWarehouseId: '', productId: '', amount: ''
     });
 
     useEffect(() => {
@@ -62,58 +89,7 @@ const InventoryList = () => {
         }
     };
 
-    // --- HANDLERS FOR ADD/EDIT STOCK ---
-    const handleAddInput = (e) => {
-        setAddFormData({ ...addFormData, [e.target.name]: e.target.value });
-    };
-
-    // New Helper: Prepare form for Editing
-    const handleEdit = (item) => {
-        setAddFormData({
-            productId: item.product.id,       // Extract ID from object
-            warehouseId: item.warehouse.id,   // Extract ID from object
-            quantity: item.quantity,
-            storageLocation: item.storageLocation
-        });
-        setEditingId(item.id); // Set mode to Edit
-        setShowAddModal(true);
-    };
-
-    const resetAddForm = () => {
-        setAddFormData({ productId: '', warehouseId: '', quantity: '', storageLocation: '' });
-        setEditingId(null);
-        setShowAddModal(false);
-    };
-
-    const handleSaveSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const payload = {
-                product: { id: addFormData.productId },
-                warehouse: { id: addFormData.warehouseId },
-                quantity: parseInt(addFormData.quantity),
-                storageLocation: addFormData.storageLocation
-            };
-
-            if (editingId) {
-                // Update Mode
-                await updateInventory(editingId, payload);
-                alert("Inventory Updated!");
-            } else {
-                // Create Mode
-                await createInventory(payload);
-                alert("Inventory Added!");
-            }
-
-            resetAddForm();
-            loadInventory();
-        } catch (error) {
-            console.error("Error saving inventory:", error);
-            alert("Failed: " + (error.response?.data?.message || error.message));
-        }
-    };
-
-    // --- HANDLERS FOR TRANSFERRING STOCK ---
+    // Transfer Logic (Not using crud hook because it's unique)
     const handleTransferInput = (e) => {
         setTransferData({ ...transferData, [e.target.name]: e.target.value });
     };
@@ -124,7 +100,6 @@ const InventoryList = () => {
             alert("Source and Destination warehouses cannot be the same!");
             return;
         }
-
         try {
             const payload = {
                 sourceWarehouseId: parseInt(transferData.sourceWarehouseId),
@@ -152,20 +127,9 @@ const InventoryList = () => {
 
     const columns = [
         { header: "ID", key: "id" },
-        { 
-            header: "Product", 
-            render: (item) => (
-                <div>
-                    <strong>{item.product.name}</strong>
-                    <div className="small text-muted">{item.product.sku}</div>
-                </div>
-            )
-        },
+        { header: "Product", render: (item) => <div><strong>{item.product.name}</strong><div className="small text-muted">{item.product.sku}</div></div> },
         { header: "Warehouse", render: (item) => item.warehouse.name },
-        { 
-            header: "Quantity", 
-            render: (item) => <span className={`badge ${item.quantity < 10 ? 'bg-danger' : 'bg-success'}`}>{item.quantity}</span> 
-        },
+        { header: "Quantity", render: (item) => <span className={`badge ${item.quantity < 10 ? 'bg-danger' : 'bg-success'}`}>{item.quantity}</span> },
         { header: "Location", key: "storageLocation" }
     ];
 
@@ -177,7 +141,7 @@ const InventoryList = () => {
                     <button className="btn btn-warning me-2" onClick={() => setShowTransferModal(true)}>
                         <i className="bi bi-arrow-left-right"></i> Transfer Stock
                     </button>
-                    <button className="btn btn-primary" onClick={() => { resetAddForm(); setShowAddModal(true); }}>
+                    <button className="btn btn-primary" onClick={openCreateModal}>
                         + Add New Stock
                     </button>
                 </div>
@@ -188,28 +152,18 @@ const InventoryList = () => {
                 columns={columns}
                 actions={(item) => (
                     <div>
-                        <button 
-                            className="btn btn-sm btn-outline-primary me-2"
-                            onClick={() => handleEdit(item)}
-                        >
+                        <button className="btn btn-sm btn-outline-primary me-2" onClick={() => handleEditClick(item)}>
                             Edit
                         </button>
-                        <button 
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => handleDelete(item.id)}
-                        >
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(item.id)}>
                             Delete
                         </button>
                     </div>
                 )}
             />
 
-            {/* --- MODAL 1: ADD/EDIT STOCK --- */}
-            <GenericModal 
-                show={showAddModal} 
-                onClose={resetAddForm} 
-                title={editingId ? "Edit Inventory Item" : "Add Stock to Warehouse"}
-            >
+            {/* ADD/EDIT MODAL */}
+            <GenericModal show={showAddModal} onClose={closeAddModal} title={editingId ? "Edit Inventory Item" : "Add Stock to Warehouse"}>
                 <form onSubmit={handleSaveSubmit}>
                     <div className="mb-3">
                         <label className="form-label">Product</label>
@@ -234,15 +188,13 @@ const InventoryList = () => {
                         <input type="text" className="form-control" name="storageLocation" value={addFormData.storageLocation} onChange={handleAddInput} required />
                     </div>
                     <div className="d-flex justify-content-end">
-                        <button type="button" className="btn btn-secondary me-2" onClick={resetAddForm}>Cancel</button>
-                        <button type="submit" className="btn btn-success">
-                            {editingId ? "Update Stock" : "Save Stock"}
-                        </button>
+                        <button type="button" className="btn btn-secondary me-2" onClick={closeAddModal}>Cancel</button>
+                        <button type="submit" className="btn btn-success">{editingId ? "Update Stock" : "Save Stock"}</button>
                     </div>
                 </form>
             </GenericModal>
 
-            {/* --- MODAL 2: TRANSFER STOCK --- */}
+            {/* TRANSFER MODAL (Kept Manual) */}
             <GenericModal show={showTransferModal} onClose={() => setShowTransferModal(false)} title="Transfer Inventory">
                 <form onSubmit={handleTransferSubmit}>
                     <div className="mb-3">
@@ -252,7 +204,6 @@ const InventoryList = () => {
                             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </div>
-
                     <div className="row">
                         <div className="col-md-6 mb-3">
                             <label className="form-label">From (Source)</label>
@@ -266,19 +217,15 @@ const InventoryList = () => {
                             <select className="form-select" name="destWarehouseId" value={transferData.destWarehouseId} onChange={handleTransferInput} required>
                                 <option value="">Dest Warehouse...</option>
                                 {warehouses.map(w => (
-                                    <option key={w.id} value={w.id} disabled={w.id === parseInt(transferData.sourceWarehouseId)}>
-                                        {w.name}
-                                    </option>
+                                    <option key={w.id} value={w.id} disabled={w.id === parseInt(transferData.sourceWarehouseId)}>{w.name}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
-
                     <div className="mb-3">
                         <label className="form-label">Amount to Move</label>
                         <input type="number" className="form-control" name="amount" value={transferData.amount} onChange={handleTransferInput} required min="1" />
                     </div>
-
                     <div className="d-flex justify-content-end">
                         <button type="button" className="btn btn-secondary me-2" onClick={() => setShowTransferModal(false)}>Cancel</button>
                         <button type="submit" className="btn btn-warning">Transfer Stock</button>

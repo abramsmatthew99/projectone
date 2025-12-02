@@ -1,20 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { getAllProducts, createProduct, updateProduct, deleteProduct} from '../services/api';
+import { getAllProducts, createProduct, updateProduct, deleteProduct } from '../services/api';
 import GenericTable from '../components/GenericTable';
 import GenericModal from '../components/GenericModal';
+import useCrudForm from '../hooks/useCrudForm';
 
 const ProductList = () => {
     const [products, setProducts] = useState([]);
-    const [showModal, setShowModal] = useState(false);
-    
-    // 2. New State to track which ID we are editing (null = Create Mode)
-    const [editingId, setEditingId] = useState(null);
-    
-    const [formData, setFormData] = useState({
-        name: '',
-        sku: '',
-        description: ''
-    });
+
+    // --- USE THE HOOK ---
+    const {
+        formData,
+        editingId,
+        showModal,
+        handleInputChange,
+        openCreateModal,
+        openEditModal,
+        closeModal,
+        handleSubmit
+    } = useCrudForm(
+        { name: '', sku: '', description: '' }, // Initial State
+        createProduct, // Create API
+        updateProduct, // Update API
+        () => loadProducts() // On Success Callback
+    );
 
     useEffect(() => {
         loadProducts();
@@ -29,63 +37,16 @@ const ProductList = () => {
         }
     };
 
-    const handleInputChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
-        });
-    };
-
-    //for editing rather than creating
-    const handleEdit = (product) => {
-        setFormData({
-            name: product.name,
-            sku: product.sku,
-            description: product.description || '' // Handle null descriptions safely
-        });
-        setEditingId(product.id); // Set the ID so we know we are editing
-        setShowModal(true);
-    };
-
-    // 4. Helper to reset everything when closing/saving
-    const resetForm = () => {
-        setFormData({ name: '', sku: '', description: '' });
-        setEditingId(null); // Reset back to "Create Mode"
-        setShowModal(false);
-    };
-
     const handleDelete = async (id) => {
-        // Warning: Deleting a product usually cascades to delete its inventory too
         if (window.confirm("Are you sure? This will delete the product and all associated inventory!")) {
             try {
                 await deleteProduct(id);
                 alert("Product Deleted!");
-                loadProducts(); // Refresh the list
+                loadProducts();
             } catch (error) {
                 console.error("Error deleting product:", error);
-                alert("Failed to delete product. Check console for details.");
+                alert("Failed to delete product.");
             }
-        }
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editingId) {
-                // --- UPDATE MODE ---
-                await updateProduct(editingId, formData);
-                alert("Product Updated!");
-            } else {
-                // --- CREATE MODE ---
-                await createProduct(formData);
-                alert("Product Created!");
-            }
-            
-            resetForm();
-            loadProducts();
-        } catch (error) {
-            console.error("Error saving product:", error);
-            alert("Failed to save product.");
         }
     };
 
@@ -100,13 +61,7 @@ const ProductList = () => {
         <div className="container mt-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>Product Catalog</h2>
-                <button 
-                    className="btn btn-primary"
-                    onClick={() => {
-                        resetForm(); // Ensure we start fresh
-                        setShowModal(true);
-                    }}
-                >
+                <button className="btn btn-primary" onClick={openCreateModal}>
                     + Create New Product
                 </button>
             </div>
@@ -116,16 +71,10 @@ const ProductList = () => {
                 data={products}
                 actions={(product) => (
                     <div>
-                        <button 
-                            className="btn btn-sm btn-outline-primary me-2"
-                            onClick={() => handleEdit(product)}
-                        >
+                        <button className="btn btn-sm btn-outline-primary me-2" onClick={() => openEditModal(product)}>
                             Edit
                         </button>
-                        <button 
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => handleDelete(product.id)}
-                        >
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(product.id)}>
                             Delete
                         </button>
                     </div>
@@ -134,44 +83,24 @@ const ProductList = () => {
 
             <GenericModal 
                 show={showModal} 
-                onClose={resetForm} 
-                title={editingId ? "Edit Product" : "Add New Product"} // Dynamic Title
+                onClose={closeModal} 
+                title={editingId ? "Edit Product" : "Add New Product"}
             >
                 <form onSubmit={handleSubmit}>
                     <div className="mb-3">
                         <label className="form-label">Product Name</label>
-                        <input 
-                            type="text" 
-                            className="form-control" 
-                            name="name" 
-                            value={formData.name} 
-                            onChange={handleInputChange} 
-                            required 
-                        />
+                        <input type="text" className="form-control" name="name" value={formData.name} onChange={handleInputChange} required />
                     </div>
                     <div className="mb-3">
                         <label className="form-label">SKU</label>
-                        <input 
-                            type="text" 
-                            className="form-control" 
-                            name="sku" 
-                            value={formData.sku} 
-                            onChange={handleInputChange} 
-                            required 
-                        />
+                        <input type="text" className="form-control" name="sku" value={formData.sku} onChange={handleInputChange} required />
                     </div>
                     <div className="mb-3">
                         <label className="form-label">Description</label>
-                        <textarea 
-                            className="form-control" 
-                            name="description" 
-                            rows="3"
-                            value={formData.description} 
-                            onChange={handleInputChange} 
-                        />
+                        <textarea className="form-control" name="description" rows="3" value={formData.description} onChange={handleInputChange} />
                     </div>
                     <div className="d-flex justify-content-end">
-                        <button type="button" className="btn btn-secondary me-2" onClick={resetForm}>Cancel</button>
+                        <button type="button" className="btn btn-secondary me-2" onClick={closeModal}>Cancel</button>
                         <button type="submit" className="btn btn-success">
                             {editingId ? "Update Product" : "Save Product"}
                         </button>
